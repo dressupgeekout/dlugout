@@ -41,6 +41,7 @@ class Application
 
     setup_main_hbox
     setup_main_vbox
+    setup_weather_indicator
     setup_inning_marker
     setup_bases_widget
     setup_count_widget
@@ -65,6 +66,33 @@ class Application
   private def setup_main_vbox
     @main_vbox = Gtk::VBox.new
     @main_hbox.pack_end(@main_vbox)
+  end
+
+  private def setup_weather_indicator
+    @weather_indicator = Gtk::Label.new("(weather)")
+    @main_vbox.pack_start(@weather_indicator)
+  end
+
+  # Mapping provided by SIBR:
+  # https://github.com/Society-for-Internet-Blaseball-Research/blaseball-api-spec/blob/master/game-main.md
+  def update_weather(weather)
+    weather_map = {
+      0 => "Void",
+      1 => "Sunny",
+      2 => "Overcast ",
+      3 => "Rainy ",
+      4 => "Sandstorm",
+      5 => "Snowy",
+      6 => "Acidic",
+      7 => "Solar Eclipse",
+      8 => "Glitter",
+      9 => "Blooddrain",
+      10 => "Peanuts",
+      11 => "Lots of Birds",
+      12 => "Feedback",
+      13 => "Reverb",
+    }
+    @weather_indicator.text = weather_map[weather]
   end
 
   private def setup_inning_marker
@@ -250,6 +278,7 @@ class Application
     })
     update_inning_marker(e[:inning], e[:is_top]) 
     update_count_widget(e[:current_balls], e[:current_strikes], e[:current_outs])
+    update_weather(e[:weather])
 
     # Who's at the plate now?  Remember, there is no "batter" as such
     # once they're running.
@@ -319,6 +348,7 @@ class Application
             @latest_event[:current_balls] = item["atBatBalls"]
             @latest_event[:current_strikes] = item["atBatStrikes"]
             @latest_event[:current_outs] = item["halfInningOuts"]
+            @latest_event[:weather] = item["weather"]
           end
         end
       end
