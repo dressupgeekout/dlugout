@@ -92,7 +92,7 @@ class Application
       12 => "Feedback",
       13 => "Reverb",
     }
-    @weather_indicator.text = weather_map[weather]
+    @weather_indicator.text = weather_map[weather] || "(weather)"
   end
 
   private def setup_inning_marker
@@ -159,7 +159,17 @@ class Application
   end
 
   private def setup_events_box
-    @events_box = Gtk::VBox.new(true, 0)
+    @events_list = Gtk::ListStore.new(String, String)
+    @events_list.append # Can't get an iterator unless there's something to iterate on
+    @events_list_iter = @events_list.get_iter("0")
+    @events_list_iter.first!
+
+    # I.e.: "The data first column in the ListStore will be displayed in the
+    # first column of the TreeView."
+    @events_box = Gtk::TreeView.new(@events_list)
+    @events_box.insert_column(Gtk::TreeViewColumn.new("Id", Gtk::CellRendererText.new, :text => 0), 0)
+    @events_box.insert_column(Gtk::TreeViewColumn.new("Descr", Gtk::CellRendererText.new, :text => 1), 1)
+
     @events_scrollwindow = Gtk::ScrolledWindow.new
     @events_scrollwindow.add_with_viewport(@events_box)
     @main_vbox.pack_start(@events_scrollwindow)
@@ -167,9 +177,10 @@ class Application
 
   # An "event" in this case is a single message from a single game.
   def new_event(n, text)
-    widget = Gtk::Label.new(n.to_s + ": " + text)
-    @events_box.pack_end(widget)
-    @events_box.show_all
+    @events_list_iter.set_value(0, n.to_s)
+    @events_list_iter.set_value(1, text)
+    @events_list.append
+    @events_list_iter.next!
 
     if false # XXX actually this is supposed to be just an option
       # XXX stupid hack to force macOS's speech synthesis to actually respect periods
