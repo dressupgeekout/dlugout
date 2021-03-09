@@ -31,9 +31,10 @@ end
 class Application
    def initialize
     @latest_event = {:NEW => false,}
-    @schedule = {:NEW => false,}
+    @schedule = {}
     @last_message_n = -1
     @most_recent_batter = nil
+    @current_day = -1
 
     setup_team_map
 
@@ -68,17 +69,22 @@ class Application
     @main_hbox.pack_end(@main_vbox)
   end
 
-  # XXX The maximum value actually comes from the games schedule
-  #
-  # XXX this should actually be a combobox
   private def setup_game_changer
-    @game_changer = Gtk::SpinButton.new(1, 8, 1)
+    @game_changer = Gtk::ComboBox.new(true)
+    @game_changer.signal_connect("changed") { |_| self.on_game_select } 
     @main_vbox.pack_start(@game_changer)
   end
 
-  # Minus one to account for zero-based list of scheduled games.
   def get_current_game_index
-    return @game_changer.value_as_int - 1 
+    return @game_changer.active
+  end
+
+  def current_game_descr
+    return @game_changer.active_text
+  end
+
+  def on_game_select
+    puts ">>> I'M NOW TUNED IN TO: #{self.current_game_descr}"
   end
 
   private def setup_weather_indicator
@@ -287,18 +293,13 @@ class Application
     end
   end
 
+  # It is the caller's responsibility to ensure this method isn't called more
+  # than once per game-day.
   def process_latest_schedule
-    return if !@schedule[:NEW]
-    games = @schedule[:games]
-
-    games.each do |game|
+    @schedule[:games].each_with_index do |game, i|
       descr = sprintf("%s at %s", game["awayTeamName"], game["homeTeamName"])
-      p descr
+      @game_changer.insert_text(i, descr)
     end
-
-    # Don't process this again. Same as in #process_latest_event.
-    @schedule.clear
-    @schedule[:NEW] = false
   end
 
   # Takes the "pre-massaged" message and updates the UI based on the new data.
@@ -349,7 +350,10 @@ class Application
   # stupidly slow.
   private def setup_stream_thread
     Gtk.idle_add {
-      process_latest_schedule
+      if @schedule[:games] && (@current_day != @schedule[:day])
+        process_latest_schedule 
+        @current_day = @schedule[:day]
+      end
       process_latest_event
       sleep 0.1 # To avoid ridiculous CPU usage
       true # To guarantee this idle-function will always loop
@@ -363,10 +367,10 @@ class Application
       client.on_event do |event|
         data = JSON.load(event.data)
 
-        # The schedule contains data for all games.
+        # The schedule contains data for the whole day, basically.
         schedule = data["value"]["games"]["schedule"]
-        @schedule[:NEW] = true
         @schedule[:games] = schedule
+        @schedule[:day] = data["value"]["games"]["sim"]["day"]
 
         # The 'item' is for the specific game we've tuned into.
         #
