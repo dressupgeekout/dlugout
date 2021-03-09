@@ -31,9 +31,9 @@ end
 class Application
    def initialize
     @latest_event = {:NEW => false,}
+    @schedule = {:NEW => false,}
     @last_message_n = -1
     @most_recent_batter = nil
-    @current_game_id = nil
 
     setup_team_map
 
@@ -41,6 +41,7 @@ class Application
 
     setup_main_hbox
     setup_main_vbox
+    setup_game_changer
     setup_weather_indicator
     setup_inning_marker
     setup_bases_widget
@@ -55,7 +56,6 @@ class Application
 
     #####
 
-    @current_game_index = 0
     setup_stream_thread
   end
 
@@ -66,6 +66,19 @@ class Application
   private def setup_main_vbox
     @main_vbox = Gtk::VBox.new
     @main_hbox.pack_end(@main_vbox)
+  end
+
+  # XXX The maximum value actually comes from the games schedule
+  #
+  # XXX this should actually be a combobox
+  private def setup_game_changer
+    @game_changer = Gtk::SpinButton.new(1, 8, 1)
+    @main_vbox.pack_start(@game_changer)
+  end
+
+  # Minus one to account for zero-based list of scheduled games.
+  def get_current_game_index
+    return @game_changer.value_as_int - 1 
   end
 
   private def setup_weather_indicator
@@ -274,6 +287,20 @@ class Application
     end
   end
 
+  def process_latest_schedule
+    return if !@schedule[:NEW]
+    games = @schedule[:games]
+
+    games.each do |game|
+      descr = sprintf("%s at %s", game["awayTeamName"], game["homeTeamName"])
+      p descr
+    end
+
+    # Don't process this again. Same as in #process_latest_event.
+    @schedule.clear
+    @schedule[:NEW] = false
+  end
+
   # Takes the "pre-massaged" message and updates the UI based on the new data.
   # Because we're updating the UI, this method *cannot* be executed in a
   # separate thread; it has to happen in Gtk's main thread.
@@ -322,6 +349,7 @@ class Application
   # stupidly slow.
   private def setup_stream_thread
     Gtk.idle_add {
+      process_latest_schedule
       process_latest_event
       sleep 0.1 # To avoid ridiculous CPU usage
       true # To guarantee this idle-function will always loop
@@ -334,33 +362,38 @@ class Application
     @sse_client = SSE::Client.new("https://www.blaseball.com/events/streamData", logger: logger, read_timeout: nil) do |client|
       client.on_event do |event|
         data = JSON.load(event.data)
-        data["value"]["games"]["schedule"].each_with_index do |item, i|
-          next if i != 0
 
-          # Sometimes we get the same message sent to us twice (especially when
-          # there's a home run, for some reason). Don't try to update the
-          # @latest_event in that case.
-          playcount = item["playCount"]
-          if playcount != @last_message_n
-            @last_message_n = playcount
-            puts ">> NEW MESSAGE (#{playcount}) <<"
-            @latest_event[:NEW] = true
-            @latest_event[:text] = item["lastUpdate"]
-            @latest_event[:play_count] = playcount
-            @latest_event[:bases_occupied] = item["basesOccupied"]
-            @latest_event[:baserunners] = item["baseRunners"]
-            @latest_event[:baserunner_names] = item["baseRunnerNames"]
-            @latest_event[:inning] = item["inning"] + 1 # +1 because it's zero-based
-            @latest_event[:is_top] = item["topOfInning"]
-            @latest_event[:away_batter] = item["awayBatter"]
-            @latest_event[:away_batter_name] = item["awayBatterName"]
-            @latest_event[:home_batter] = item["homeBatter"]
-            @latest_event[:home_batter_name] = item["homeBatterName"]
-            @latest_event[:current_balls] = item["atBatBalls"]
-            @latest_event[:current_strikes] = item["atBatStrikes"]
-            @latest_event[:current_outs] = item["halfInningOuts"]
-            @latest_event[:weather] = item["weather"]
-          end
+        # The schedule contains data for all games.
+        schedule = data["value"]["games"]["schedule"]
+        @schedule[:NEW] = true
+        @schedule[:games] = schedule
+
+        # The 'item' is for the specific game we've tuned into.
+        #
+        # Sometimes we get the same message sent to us twice (especially when
+        # there's a home run, for some reason). Don't try to update the
+        # @latest_event in that case.
+        item = schedule[self.get_current_game_index]
+        playcount = item["playCount"]
+        if playcount != @last_message_n
+          @last_message_n = playcount
+          puts ">> NEW MESSAGE (#{playcount}) <<"
+          @latest_event[:NEW] = true
+          @latest_event[:text] = item["lastUpdate"]
+          @latest_event[:play_count] = playcount
+          @latest_event[:bases_occupied] = item["basesOccupied"]
+          @latest_event[:baserunners] = item["baseRunners"]
+          @latest_event[:baserunner_names] = item["baseRunnerNames"]
+          @latest_event[:inning] = item["inning"] + 1 # +1 because it's zero-based
+          @latest_event[:is_top] = item["topOfInning"]
+          @latest_event[:away_batter] = item["awayBatter"]
+          @latest_event[:away_batter_name] = item["awayBatterName"]
+          @latest_event[:home_batter] = item["homeBatter"]
+          @latest_event[:home_batter_name] = item["homeBatterName"]
+          @latest_event[:current_balls] = item["atBatBalls"]
+          @latest_event[:current_strikes] = item["atBatStrikes"]
+          @latest_event[:current_outs] = item["halfInningOuts"]
+          @latest_event[:weather] = item["weather"]
         end
       end
     end
