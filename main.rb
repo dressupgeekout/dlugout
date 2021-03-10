@@ -309,8 +309,10 @@ class Application
   # Takes the "pre-massaged" message and updates the UI based on the new data.
   # Because we're updating the UI, this method *cannot* be executed in a
   # separate thread; it has to happen in Gtk's main thread.
+  #
+  # It is the caller's responsibility to make sure this called only once
+  # each event.
   def process_latest_event
-    return if !@latest_event[:NEW]
     e = @latest_event
 
     new_event(e[:play_count], e[:text])
@@ -335,12 +337,6 @@ class Application
       update_playerinfo(batterid, battername)
       get_hitting_stats(batterid)
     end
-
-    # Alright, we're done. Don't process this message again. Use #clear to
-    # guarantee that it's the same object in memory. Not sure exactly how much
-    # benefit we're getting from that.
-    @latest_event.clear
-    @latest_event[:NEW] = false
   end
 
   # The goal is to avoid doing any GTK-related stuff inside of the
@@ -358,7 +354,13 @@ class Application
         process_latest_schedule 
         @current_day = @schedule[:day]
       end
-      process_latest_event
+
+      if @latest_event[:NEW]
+        process_latest_event 
+        @latest_event.clear
+        @latest_event[:NEW] = false
+      end
+
       sleep 0.1 # To avoid ridiculous CPU usage
       true # To guarantee this idle-function will always loop
     }
