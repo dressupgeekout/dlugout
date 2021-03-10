@@ -97,9 +97,9 @@ class Application
   def update_weather(weather)
     weather_map = {
       0 => "Void",
-      1 => "Sunny",
-      2 => "Overcast ",
-      3 => "Rainy ",
+      1 => "Sun 2",
+      2 => "Overcast",
+      3 => "Rainy",
       4 => "Sandstorm",
       5 => "Snowy",
       6 => "Acidic",
@@ -110,8 +110,12 @@ class Application
       11 => "Lots of Birds",
       12 => "Feedback",
       13 => "Reverb",
+      14 => "Black Hole",
+      17 => "Coffee 3s",
+      18 => "Flooding",
     }
-    @weather_indicator.text = weather_map[weather] || "(weather)"
+    weather_s = weather_map[weather] || "(weather)"
+    @weather_indicator.text = "(#{weather}) #{weather_s}"
   end
 
   private def setup_inning_marker
